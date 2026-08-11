@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/pipeline.py": {
+      "includeFiles": "{reference_genes.fasta,index.html}"
+    }
+  }
+}
