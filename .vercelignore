@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+.vscode/
+.claude/
+*.fastq
+*.fasta
+*.csv
+*.pdf
+EVA.py
+cludecode.py
+Inchworm.py
+test_*.py
+SKILL.md

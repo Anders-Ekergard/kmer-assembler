@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Inchworm / Chrysalis / Butterfly - interactive demo</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+  textarea { width: 100%; height: 8rem; font-family: monospace; }
+  label { display: block; margin-top: 0.75rem; font-weight: bold; }
+  input[type=number] { width: 5rem; }
+  button { margin-top: 1rem; padding: 0.5rem 1.5rem; font-size: 1rem; }
+  section { margin-top: 2rem; }
+  h2 { border-bottom: 1px solid #ccc; padding-bottom: 0.25rem; }
+  pre { background: #f4f4f4; padding: 0.75rem; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+  .error { color: #b00020; font-weight: bold; }
+  .placeholder { color: #777; font-style: italic; }
+</style>
+</head>
+<body>
+  <h1>Trinity-like assembly pipeline</h1>
+  <p>Paste in reads (one sequence per line) and run Inchworm -> Chrysalis -> Butterfly.</p>
+
+  <label for="reads">Reads (one per line)</label>
+  <textarea id="reads">AAGCCCAATAAA
+CCAATAAACCAC
+TAAACCACTCTG
+CCACTCTGACTG</textarea>
+
+  <label for="k">k</label>
+  <input type="number" id="k" value="5" min="1">
+
+  <label for="minCount">Minimum k-mer count (filters out sequencing errors)</label>
+  <input type="number" id="minCount" value="2" min="1">
+
+  <label for="minSharedKmers">Minimum shared k-mers to merge (Chrysalis: guards against merging unrelated transcripts by chance)</label>
+  <input type="number" id="minSharedKmers" value="3" min="1">
+
+  <label for="minEdgeSupport">Minimum edge support (Butterfly: minimum reads to extend a walk)</label>
+  <input type="number" id="minEdgeSupport" value="1" min="0">
+
+  <label><input type="checkbox" id="useRevComp" checked> Include reverse complement</label>
+
+  <label for="minAnnotationScore">Minimum annotation score (Annotate: k-mer containment vs. reference genes, 0-1)</label>
+  <input type="number" id="minAnnotationScore" value="0.5" min="0" max="1" step="0.05">
+
+  <button id="run">Run pipeline</button>
+
+  <div id="output"></div>
+
+<script>
+const escapeHtml = (s) => s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+document.getElementById('run').addEventListener('click', async () => {
+  const reads = document.getElementById('reads').value.split('\n');
+  const k = Number(document.getElementById('k').value);
+  const min_kmer_count = Number(document.getElementById('minCount').value);
+  const min_shared_kmers = Number(document.getElementById('minSharedKmers').value);
+  const min_edge_support = Number(document.getElementById('minEdgeSupport').value);
+  const use_reverse_complement = document.getElementById('useRevComp').checked;
+  const min_annotation_score = Number(document.getElementById('minAnnotationScore').value);
+
+  const output = document.getElementById('output');
+  output.innerHTML = '<p>Running...</p>';
+
+  try {
+    const res = await fetch('/api/pipeline', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reads, k, min_kmer_count, use_reverse_complement, min_edge_support, min_annotation_score, min_shared_kmers })
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      output.innerHTML = `<p class="error">Error: ${escapeHtml(data.error || res.statusText)}</p>`;
+      return;
+    }
+
+    const kmerLines = Object.entries(data.kmer_counts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([kmer, count]) => `${kmer}: ${count}`)
+      .join('\n');
+
+    const componentsHtml = data.components.map((graph, i) => {
+      const edges = Object.entries(graph)
+        .map(([node, neighbors]) => `${node} -> [${neighbors.join(', ')}]`)
+        .join('\n');
+      return `<h3>Component ${i + 1}</h3><pre>${escapeHtml(edges)}</pre>`;
+    }).join('');
+
+    output.innerHTML = `
+      <section>
+        <h2>1. Inchworm - k-mer counts (after filtering)</h2>
+        <pre>${escapeHtml(kmerLines)}</pre>
+        <h2>Inchworm - contigs</h2>
+        <pre>${escapeHtml(data.contigs.join('\n'))}</pre>
+      </section>
+      <section>
+        <h2>2. Chrysalis - de Bruijn graphs per component</h2>
+        ${componentsHtml || '<p>No components.</p>'}
+      </section>
+      <section>
+        <h2>3. Butterfly - reconstructed transcripts</h2>
+        ${data.butterfly && data.butterfly.length
+          ? `<pre>${escapeHtml(data.butterfly.join('\n'))}</pre>`
+          : '<p class="placeholder">No transcripts assembled.</p>'}
+      </section>
+      <section>
+        <h2>4. Annotate - matches against reference genes</h2>
+        ${data.annotations && data.annotations.length
+          ? `<pre>${escapeHtml(data.annotations.map(a => `${a.transcript}  ->  ${a.match ?? '(no match)'}  (score ${a.score})`).join('\n'))}</pre>`
+          : '<p class="placeholder">No transcripts to annotate.</p>'}
+      </section>
+    `;
+  } catch (err) {
+    output.innerHTML = `<p class="error">Error: ${escapeHtml(err.message)}</p>`;
+  }
+});
+</script>
+</body>
+</html>
