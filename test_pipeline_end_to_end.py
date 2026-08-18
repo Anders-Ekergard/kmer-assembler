@@ -21,7 +21,6 @@ from pathlib import Path
 from annotate_mvp import annotate_transcripts
 from api.pipeline import run_pipeline
 from export_mvp import build_report_rows, write_csv
-from express_mvp import compare_samples, quantify_transcripts
 
 GENE_ALPHA = "CACCTGGTGATCCTATGCTTGTGA"
 GENE_BETA = "GTACCCAGAAAATAGCGACGGACC"
@@ -60,15 +59,15 @@ class MockCommunityEndToEndTests(unittest.TestCase):
             + _tile_reads(GENE_BETA, READ_LEN, depth=3)
             + _tile_reads(GENE_GAMMA, READ_LEN, depth=3)
         )
-        pooled_reads = cls.reads_a + cls.reads_b
-
         cls.reference_genes = {"gene_alpha": GENE_ALPHA, "gene_beta": GENE_BETA, "gene_gamma": GENE_GAMMA}
 
-        # Co-assembly: pool both samples' reads for Inchworm/Chrysalis/Butterfly,
-        # so there's one consistent transcript set to compare expression against -
-        # see the per-sample-vs-co-assembly design question flagged in project memory.
-        result = run_pipeline(
-            pooled_reads,
+        # run_pipeline now does its own co-assembly across the samples dict
+        # (pools every sample's reads for Inchworm/Chrysalis/Butterfly, so
+        # there's one consistent transcript set to compare expression against -
+        # see the per-sample-vs-co-assembly design question flagged in project
+        # memory) plus its own Express/report_rows step.
+        cls.result = run_pipeline(
+            {"stimulus_a": cls.reads_a, "stimulus_b": cls.reads_b},
             k=K,
             min_kmer_count=2,
             use_reverse_complement=True,
@@ -76,14 +75,14 @@ class MockCommunityEndToEndTests(unittest.TestCase):
             min_annotation_score=0.5,
             min_shared_kmers=3,
         )
-        cls.transcripts = result["butterfly"]
+        cls.transcripts = cls.result["butterfly"]
         # run_pipeline annotates against the app's own reference_genes.fasta, which
         # knows nothing about our synthetic genes - re-annotate against the true
         # reference so the test's ground truth doesn't depend on that file's contents.
         cls.annotations = annotate_transcripts(cls.transcripts, cls.reference_genes, K, min_score=0.5)
-
-        quantified = quantify_transcripts(cls.transcripts, {"stimulus_a": cls.reads_a, "stimulus_b": cls.reads_b})
-        cls.compared = compare_samples(quantified, "stimulus_a", "stimulus_b")
+        # Expression/fold-change don't depend on which reference was used for
+        # annotation, so run_pipeline's own result is reused as-is here.
+        cls.compared = cls.result["expression"]
 
     def _entry_for_gene(self, gene_name: str) -> dict:
         match_by_transcript = {a["transcript"]: a["match"] for a in self.annotations}
@@ -124,6 +123,21 @@ class MockCommunityEndToEndTests(unittest.TestCase):
         entry = self._entry_for_gene("gene_gamma")
         self.assertEqual(entry["counts"]["stimulus_a"], 0)
         self.assertGreater(entry["counts"]["stimulus_b"], 0)
+
+    def test_run_pipelines_own_report_rows_have_the_right_shape(self):
+        # match values here are checked separately below against the true
+        # synthetic reference - run_pipeline annotates against the app's own
+        # demo reference_genes.fasta, which doesn't know these genes at all.
+        report_rows = self.result["report_rows"]
+        self.assertEqual(len(report_rows), 3)
+        self.assertEqual(
+            set(report_rows[0].keys()),
+            {
+                "transcript", "length", "match", "annotation_score",
+                "count_stimulus_a", "count_stimulus_b",
+                "tpm_stimulus_a", "tpm_stimulus_b", "log2fc",
+            },
+        )
 
     def test_csv_export_has_one_row_per_transcript_with_the_right_matches(self):
         rows = build_report_rows(self.annotations, self.compared)

@@ -14,16 +14,30 @@
   pre { background: #f4f4f4; padding: 0.75rem; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
   .error { color: #b00020; font-weight: bold; }
   .placeholder { color: #777; font-style: italic; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+  th, td { border: 1px solid #ddd; padding: 0.35rem 0.5rem; text-align: left; }
+  th { background: #f4f4f4; }
+  td.seq { font-family: monospace; word-break: break-all; max-width: 20rem; }
 </style>
 </head>
 <body>
   <h1>Trinity-like assembly pipeline</h1>
-  <p>Paste in reads (one sequence per line) and run Inchworm -> Chrysalis -> Butterfly.</p>
+  <p>Paste in reads for a control and a test sample (one sequence per line, or raw pasted FASTQ) and run Inchworm -> Chrysalis -> Butterfly -> Annotate -> Express to find differentially expressed transcripts.</p>
 
-  <label for="reads">Reads (one per line)</label>
-  <textarea id="reads">AAGCCCAATAAA
+  <label for="controlReads">Control reads (one per line, or raw FASTQ)</label>
+  <textarea id="controlReads">AAGCCCAATAAA
 CCAATAAACCAC
 TAAACCACTCTG
+CCACTCTGACTG</textarea>
+
+  <label for="testReads">Test reads (one per line, or raw FASTQ)</label>
+  <textarea id="testReads">AAGCCCAATAAA
+AAGCCCAATAAA
+CCAATAAACCAC
+CCAATAAACCAC
+TAAACCACTCTG
+TAAACCACTCTG
+CCACTCTGACTG
 CCACTCTGACTG</textarea>
 
   <label for="k">k</label>
@@ -50,8 +64,46 @@ CCACTCTGACTG</textarea>
 <script>
 const escapeHtml = (s) => s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 
+// Accepts either "one sequence per line" or raw pasted FASTQ (@header /
+// sequence / + / quality, repeating) - same every-4th-line convention as
+// inchworm_mvp.load_reads uses for FASTQ files on disk.
+const parseReadsInput = (text) => {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  if (lines.length > 0 && lines[0].startsWith('@')) {
+    const reads = [];
+    for (let i = 1; i < lines.length; i += 4) reads.push(lines[i]);
+    return reads;
+  }
+  return lines;
+};
+
+const rowsToCsv = (rows) => {
+  if (!rows.length) return '';
+  const fields = Object.keys(rows[0]);
+  const escapeCell = (v) => {
+    const s = v === null || v === undefined ? '' : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const lines = [fields.join(',')];
+  for (const row of rows) lines.push(fields.map(f => escapeCell(row[f])).join(','));
+  return lines.join('\n');
+};
+
+const downloadCsv = (rows) => {
+  const blob = new Blob([rowsToCsv(rows)], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'report.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
 document.getElementById('run').addEventListener('click', async () => {
-  const reads = document.getElementById('reads').value.split('\n');
+  const samples = {
+    control: parseReadsInput(document.getElementById('controlReads').value),
+    test: parseReadsInput(document.getElementById('testReads').value),
+  };
   const k = Number(document.getElementById('k').value);
   const min_kmer_count = Number(document.getElementById('minCount').value);
   const min_shared_kmers = Number(document.getElementById('minSharedKmers').value);
@@ -66,7 +118,7 @@ document.getElementById('run').addEventListener('click', async () => {
     const res = await fetch('/api/pipeline', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reads, k, min_kmer_count, use_reverse_complement, min_edge_support, min_annotation_score, min_shared_kmers })
+      body: JSON.stringify({ samples, k, min_kmer_count, use_reverse_complement, min_edge_support, min_annotation_score, min_shared_kmers })
     });
     const data = await res.json();
 
@@ -110,7 +162,25 @@ document.getElementById('run').addEventListener('click', async () => {
           ? `<pre>${escapeHtml(data.annotations.map(a => `${a.transcript}  ->  ${a.match ?? '(no match)'}  (score ${a.score})`).join('\n'))}</pre>`
           : '<p class="placeholder">No transcripts to annotate.</p>'}
       </section>
+      <section>
+        <h2>5. Express - differential expression (control vs test)</h2>
+        ${data.report_rows && data.report_rows.length ? `
+          <table>
+            <thead><tr>${Object.keys(data.report_rows[0]).map(f => `<th>${escapeHtml(f)}</th>`).join('')}</tr></thead>
+            <tbody>
+              ${data.report_rows.map(row => `<tr>${Object.keys(row).map(f =>
+                `<td class="${f === 'transcript' ? 'seq' : ''}">${escapeHtml(row[f] === null ? '' : String(row[f]))}</td>`
+              ).join('')}</tr>`).join('')}
+            </tbody>
+          </table>
+          <button id="downloadCsv">Download CSV</button>
+        ` : '<p class="placeholder">No expression data.</p>'}
+      </section>
     `;
+
+    if (data.report_rows && data.report_rows.length) {
+      document.getElementById('downloadCsv').addEventListener('click', () => downloadCsv(data.report_rows));
+    }
   } catch (err) {
     output.innerHTML = `<p class="error">Error: ${escapeHtml(err.message)}</p>`;
   }

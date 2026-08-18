@@ -19,13 +19,15 @@ from inchworm_mvp import (
 from chrysalis_mvp import cluster_kmers
 from butterfly_mvp import run_butterfly
 from annotate_mvp import annotate_transcripts, load_reference_genes
+from express_mvp import compare_samples, quantify_transcripts
+from export_mvp import build_report_rows
 
 _REFERENCE_GENES_PATH = Path(__file__).resolve().parent.parent / "reference_genes.fasta"
 _REFERENCE_GENES = load_reference_genes(str(_REFERENCE_GENES_PATH))
 
 
 def run_pipeline(
-    reads: list[str],
+    samples: dict[str, list[str]],
     k: int,
     min_kmer_count: int,
     use_reverse_complement: bool,
@@ -33,9 +35,14 @@ def run_pipeline(
     min_annotation_score: float = 0.5,
     min_shared_kmers: int = 3,
 ) -> dict:
-    original_reads = reads
-    if use_reverse_complement:
-        reads = add_reverse_complements(reads)
+    if len(samples) != 2:
+        raise ValueError("Exactly 2 samples are required to compare expression")
+
+    # Co-assembly: pool every sample's reads into one set of transcripts, so
+    # there's a single consistent reference to compare expression against
+    # across samples (same approach validated in test_pipeline_end_to_end.py).
+    original_reads = [read for reads in samples.values() for read in reads]
+    reads = add_reverse_complements(original_reads) if use_reverse_complement else original_reads
 
     kmers_count = filter_kmers_by_count(most_common_kmers(find_kmers(reads, k)), min_kmer_count)
     contigs = expand(kmers_count, k)
@@ -49,6 +56,11 @@ def run_pipeline(
     transcripts = run_butterfly(graphs, original_reads, k, min_edge_support)
     annotations = annotate_transcripts(transcripts, _REFERENCE_GENES, k, min_annotation_score)
 
+    sample_names = list(samples.keys())
+    quantified = quantify_transcripts(transcripts, samples)
+    expression = compare_samples(quantified, sample_names[0], sample_names[1])
+    report_rows = build_report_rows(annotations, expression)
+
     return {
         "kmer_counts": kmers_count,
         "contigs": contigs,
@@ -58,6 +70,8 @@ def run_pipeline(
         ],
         "butterfly": transcripts,
         "annotations": annotations,
+        "expression": expression,
+        "report_rows": report_rows,
     }
 
 
@@ -79,7 +93,10 @@ class handler(BaseHTTPRequestHandler):
 
         try:
             payload = json.loads(body or b"{}")
-            reads = [str(read).strip().upper() for read in payload["reads"] if str(read).strip()]
+            samples = {
+                str(name): [str(read).strip().upper() for read in reads if str(read).strip()]
+                for name, reads in payload["samples"].items()
+            }
             k = int(payload.get("k", 5))
             min_kmer_count = int(payload.get("min_kmer_count", 1))
             use_reverse_complement = bool(payload.get("use_reverse_complement", True))
@@ -87,13 +104,15 @@ class handler(BaseHTTPRequestHandler):
             min_annotation_score = float(payload.get("min_annotation_score", 0.5))
             min_shared_kmers = int(payload.get("min_shared_kmers", 3))
 
-            if not reads:
-                raise ValueError("At least one read is required")
+            if len(samples) != 2:
+                raise ValueError("Exactly 2 samples are required (e.g. control and test)")
+            if any(not reads for reads in samples.values()):
+                raise ValueError("Each sample needs at least one read")
             if k < 1:
                 raise ValueError("k must be a positive integer")
 
             result = run_pipeline(
-                reads,
+                samples,
                 k,
                 min_kmer_count,
                 use_reverse_complement,
