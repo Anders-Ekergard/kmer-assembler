@@ -6,6 +6,7 @@ __pycache__/
 *.fastq
 *.fasta
 !reference_genes.fasta
+!reference_genes_hive.fasta
 *.csv
 *.pdf
 EVA.py

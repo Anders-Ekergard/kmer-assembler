@@ -22,7 +22,7 @@ from annotate_mvp import annotate_transcripts, load_reference_genes
 from express_mvp import compare_samples, quantify_transcripts
 from export_mvp import build_report_rows
 
-_REFERENCE_GENES_PATH = Path(__file__).resolve().parent.parent / "reference_genes.fasta"
+_REFERENCE_GENES_PATH = Path(__file__).resolve().parent.parent / "reference_genes_hive.fasta"
 _REFERENCE_GENES = load_reference_genes(str(_REFERENCE_GENES_PATH))
 
 
