@@ -401,7 +401,21 @@ document.getElementById('run').addEventListener('click', async () => {
       return `<h3>Component ${i + 1}</h3><pre>${escapeHtml(edges)}</pre>`;
     }).join('');
 
-    const matchedGenes = [...new Set((data.annotations || []).map(a => a.match).filter(Boolean))];
+    // |log2FC| >= 1 mirrors the course project's own DEG criterion
+    // (log2FC>1, alongside a p<0.05 this demo has no replicates to compute -
+    // see the Express disclaimer above). Filtering here, not just at
+    // Annotate, means a gene that's merely present but flat (like GAPDH,
+    // the housekeeping control) doesn't get sent on to KEGG/STRING just
+    // because it was recognized - only genes that actually look
+    // differentially expressed do, matching the course PDF's own DEG ->
+    // pathway/PPI workflow instead of "every annotated gene regardless of
+    // expression change".
+    const DEG_LOG2FC_THRESHOLD = 1;
+    const degGenes = [...new Set(
+      (data.report_rows || [])
+        .filter(row => row.match && Math.abs(row.log2fc) >= DEG_LOG2FC_THRESHOLD)
+        .map(row => row.match)
+    )];
 
     output.innerHTML = `
       <section>
@@ -443,10 +457,10 @@ document.getElementById('run').addEventListener('click', async () => {
       </section>
       <section>
         <h2>6. Pathways & protein-protein interactions (KEGG + STRING)</h2>
-        <p><em>Optional, separate lookup - queries the real KEGG and STRING APIs live for whichever genes were recognized above, mirroring the manual GEO2R/Enrichr/STRING/KEGG workflow this demo is based on. Kept as its own step so a slow or unavailable third-party API can't block the assembly pipeline above.</em></p>
-        ${matchedGenes.length
-          ? `<button id="lookupPathways">Look up ${escapeHtml(matchedGenes.join(', '))} in KEGG + STRING</button><div id="pathwayOutput"></div>`
-          : '<p class="placeholder">No annotated genes to look up.</p>'}
+        <p><em>Optional, separate lookup - queries the real KEGG and STRING APIs live for the DEG candidates above (|log2FC| &ge; ${DEG_LOG2FC_THRESHOLD}, same threshold the course project used), not every annotated gene regardless of expression change, mirroring the manual GEO2R/Enrichr/STRING/KEGG workflow this demo is based on. Kept as its own step so a slow or unavailable third-party API can't block the assembly pipeline above.</em></p>
+        ${degGenes.length
+          ? `<button id="lookupPathways">Look up ${escapeHtml(degGenes.join(', '))} in KEGG + STRING</button><div id="pathwayOutput"></div>`
+          : `<p class="placeholder">No gene cleared the |log2FC| &ge; ${DEG_LOG2FC_THRESHOLD} DEG threshold - nothing to look up.</p>`}
       </section>
     `;
 
@@ -454,8 +468,8 @@ document.getElementById('run').addEventListener('click', async () => {
       document.getElementById('downloadCsv').addEventListener('click', () => downloadCsv(data.report_rows));
     }
 
-    if (matchedGenes.length) {
-      document.getElementById('lookupPathways').addEventListener('click', () => lookupPathways(matchedGenes));
+    if (degGenes.length) {
+      document.getElementById('lookupPathways').addEventListener('click', () => lookupPathways(degGenes));
     }
   } catch (err) {
     output.innerHTML = `<p class="error">Error: ${escapeHtml(err.message)}</p>`;

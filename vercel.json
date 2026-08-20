@@ -1,9 +1,7 @@
 {
   "functions": {
     "api/pipeline.py": {
-      "includeFiles": "{reference_genes_hive.fasta,index.html}"
-    },
-    "api/pathway.py": {
+      "includeFiles": "{reference_genes_hive.fasta,index.html}",
       "maxDuration": 30
     }
   }

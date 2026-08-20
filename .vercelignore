@@ -14,3 +14,13 @@ cludecode.py
 Inchworm.py
 test_*.py
 SKILL.md
+_course_pdf.txt
+
+# Sibling projects that live in this same folder but are separate,
+# unrelated apps (see project memory) - must never be uploaded into this
+# Vercel deployment. Found the hard way: hybrid_lab/api/splice.py showed up
+# as a candidate Python entrypoint during a real deploy attempt, because
+# this whole directory gets uploaded to Vercel regardless of .gitignore/git
+# tracking status - .vercelignore is the only thing that actually excludes it.
+hybrid_lab/
+in_silico_avel/

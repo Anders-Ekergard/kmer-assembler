@@ -1,6 +1,19 @@
 """
-Vercel serverless function exposing Inchworm + Chrysalis + Butterfly as a
-web API for the interactive teaching demo (see index.html).
+Vercel serverless function exposing Inchworm + Chrysalis + Butterfly (and,
+via path-based dispatch below, the KEGG/STRING pathway lookup) as a web API
+for the interactive teaching demo (see index.html).
+
+Both /api/pipeline and /api/pathway are served from this single handler
+class, not two separate files each with their own `handler`, because this
+project's Vercel Python build (pyproject.toml-driven, declares its one
+entrypoint via [tool.vercel]) only supports a single Python entrypoint per
+deployment - confirmed by a real deploy attempt with a second file
+(api/pathway.py) that Vercel refused to build ("No python entrypoint found
+... found potential entrypoints: ..."). The two routes stay independent
+HTTP requests either way (the browser still fires two separate fetch calls,
+so a slow pathway lookup still can't block a pipeline run in flight) - only
+the fact that they're compiled from one Python file changed, not their
+runtime independence.
 """
 import json
 import sys
@@ -21,6 +34,7 @@ from butterfly_mvp import run_butterfly
 from annotate_mvp import annotate_transcripts, load_reference_genes
 from express_mvp import compare_samples, quantify_transcripts
 from export_mvp import build_report_rows
+from pathway_mvp import annotate_with_pathways
 
 _REFERENCE_GENES_PATH = Path(__file__).resolve().parent.parent / "reference_genes_hive.fasta"
 _REFERENCE_GENES = load_reference_genes(str(_REFERENCE_GENES_PATH))
@@ -88,6 +102,30 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
+        if self.path.startswith("/api/pathway"):
+            self._handle_pathway()
+        else:
+            self._handle_pipeline()
+
+    def _handle_pathway(self):
+        content_length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(content_length)
+
+        try:
+            payload = json.loads(body or b"{}")
+            genes = sorted({str(name).strip() for name in payload.get("genes", []) if str(name).strip()})
+            if not genes:
+                raise ValueError("At least one gene name is required")
+
+            result = {"results": annotate_with_pathways(genes)}
+            status = 200
+        except Exception as exc:
+            result = {"error": str(exc)}
+            status = 400
+
+        self._send_json(result, status)
+
+    def _handle_pipeline(self):
         content_length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(content_length)
 
@@ -125,6 +163,9 @@ class handler(BaseHTTPRequestHandler):
             result = {"error": str(exc)}
             status = 400
 
+        self._send_json(result, status)
+
+    def _send_json(self, result: dict, status: int) -> None:
         response = json.dumps(result).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
