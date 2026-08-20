@@ -3,22 +3,75 @@
 <head>
 <meta charset="UTF-8">
 <title>Inchworm / Chrysalis / Butterfly - interactive demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
-  textarea { width: 100%; height: 8rem; font-family: monospace; }
-  label { display: block; margin-top: 0.75rem; font-weight: bold; }
+  :root {
+    --ebi-blue: #3b6fb6;
+    --ebi-blue-dark: #2d5690;
+    --text: #1a1c1a;
+    --text-muted: #55584f;
+    --border: #b6b8b3;
+    --bg-tint: #f4f5f2;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "IBM Plex Sans", Helvetica, Arial, system-ui, sans-serif;
+    color: var(--text);
+    background: #ffffff;
+    max-width: 900px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+    line-height: 1.55;
+  }
+  h1 { font-size: 2.25rem; font-weight: 700; margin: 0 0 0.5rem; letter-spacing: -0.01em; }
+  h2 { font-size: 1.35rem; font-weight: 500; color: var(--text); border-bottom: 2px solid var(--ebi-blue); padding-bottom: 0.35rem; margin: 0 0 0.75rem; }
+  h3 { font-size: 1.05rem; font-weight: 500; color: var(--ebi-blue-dark); margin: 1.25rem 0 0.4rem; }
+  p { color: var(--text-muted); max-width: 65ch; }
+  p:first-of-type { font-size: 1.05rem; }
+  label { display: block; margin-top: 0.85rem; font-weight: 700; font-size: 0.85rem; letter-spacing: 0.02em; text-transform: uppercase; color: var(--text); }
+  textarea, input[type=number] {
+    font-family: "IBM Plex Mono", monospace;
+    border: 1px solid var(--border);
+    border-radius: 0;
+    padding: 0.5rem;
+    background: #fff;
+    color: var(--text);
+  }
+  textarea { width: 100%; height: 8rem; margin-top: 0.35rem; }
   input[type=number] { width: 5rem; }
-  input[type=file] { display: block; margin-top: 0.25rem; }
-  button { margin-top: 1rem; padding: 0.5rem 1.5rem; font-size: 1rem; }
-  section { margin-top: 2rem; }
-  h2 { border-bottom: 1px solid #ccc; padding-bottom: 0.25rem; }
-  pre { background: #f4f4f4; padding: 0.75rem; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
-  .error { color: #b00020; font-weight: bold; }
-  .placeholder { color: #777; font-style: italic; }
+  input[type=file] { display: block; margin-top: 0.4rem; font-family: "IBM Plex Sans", sans-serif; font-size: 0.9rem; }
+  input[type=file]::file-selector-button {
+    font-family: inherit; font-weight: 500; font-size: 0.85rem;
+    border-radius: 0; border: 3px solid var(--ebi-blue);
+    background: #fff; color: var(--ebi-blue);
+    padding: 0.4rem 1rem; margin-right: 0.75rem; cursor: pointer;
+  }
+  input[type=file]::file-selector-button:hover { background: var(--bg-tint); }
+  button {
+    margin-top: 1.25rem; padding: 0.6rem 1.75rem;
+    font-family: inherit; font-size: 0.95rem; font-weight: 500;
+    border-radius: 0; border: 3px solid var(--ebi-blue);
+    background: var(--ebi-blue); color: #fff; cursor: pointer;
+  }
+  button:hover { background: var(--ebi-blue-dark); border-color: var(--ebi-blue-dark); }
+  button.secondary { background: #fff; color: var(--ebi-blue); }
+  button.secondary:hover { background: var(--bg-tint); }
+  section { margin-top: 2.5rem; }
+  pre {
+    background: var(--bg-tint); border-left: 3px solid var(--ebi-blue);
+    padding: 0.85rem 1rem; overflow-x: auto; white-space: pre-wrap; word-break: break-all;
+    font-family: "IBM Plex Mono", monospace; font-size: 0.85rem; color: var(--text);
+  }
+  .error { color: #b00020; font-weight: 700; }
+  .placeholder { color: var(--text-muted); font-style: italic; }
+  em { color: var(--text-muted); font-style: italic; }
   table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
-  th, td { border: 1px solid #ddd; padding: 0.35rem 0.5rem; text-align: left; }
-  th { background: #f4f4f4; }
-  td.seq { font-family: monospace; word-break: break-all; max-width: 20rem; }
+  th, td { border: 1px solid var(--border); padding: 0.5rem 0.65rem; text-align: left; }
+  th { background: var(--ebi-blue); color: #fff; font-weight: 500; }
+  tr:nth-child(even) td { background: var(--bg-tint); }
+  td.seq { font-family: "IBM Plex Mono", monospace; word-break: break-all; max-width: 20rem; }
 </style>
 </head>
 <body>
@@ -452,7 +505,7 @@ document.getElementById('run').addEventListener('click', async () => {
               ).join('')}</tr>`).join('')}
             </tbody>
           </table>
-          <button id="downloadCsv">Download CSV</button>
+          <button id="downloadCsv" class="secondary">Download CSV</button>
         ` : '<p class="placeholder">No expression data.</p>'}
       </section>
       <section>

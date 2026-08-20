@@ -6,3 +6,6 @@ __pycache__/
 .claude/
 report.csv
 contigs_*.fasta
+
+.vercel
+.env*
