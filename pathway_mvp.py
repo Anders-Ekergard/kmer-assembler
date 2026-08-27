@@ -144,6 +144,26 @@ def fetch_string_ppi_partners(gene_name: str, species: int = 9606, limit: int = 
     return [{"partner": entry["preferredName_B"], "score": entry["score"]} for entry in data]
 
 
+def fetch_string_network_image(gene_names: list[str], species: int = 9606, timeout: float = 10.0) -> bytes:
+    """
+    Fetch a rendered PPI network diagram (PNG) for a set of genes from
+    STRING - the same colored node-and-edge figure STRING's own website
+    shows (e.g. the STAT1/OAS1/IFI44L/ISG15 hub cluster in the course
+    project). Multiple identifiers are separated with "%0d" (a literal
+    carriage return), STRING's documented convention for this endpoint.
+    args:
+        gene_names: list[str] - gene symbols to include in the network
+        species: int - NCBI taxonomy ID, 9606 (Homo sapiens) by default
+        timeout: float - request timeout in seconds
+    returns:
+        bytes - PNG image data
+    """
+    identifiers = "%0d".join(urllib.parse.quote(name) for name in gene_names)
+    url = f"{STRING_BASE}/image/network?identifiers={identifiers}&species={species}"
+    with urllib.request.urlopen(url, timeout=timeout) as response:
+        return response.read()
+
+
 def annotate_with_pathways(gene_names: list[str]) -> list[dict]:
     """
     High-level entry point: for each gene name, resolve it to a KEGG gene ID
