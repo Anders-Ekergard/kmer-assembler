@@ -9,3 +9,7 @@ contigs_*.fasta
 
 .vercel
 .env*
+
+# Eget kursarbete om kansligt amne (HIV-encephalitis) - halls lokalt,
+# inte i det har publika repot.
+_course_pdf.txt
